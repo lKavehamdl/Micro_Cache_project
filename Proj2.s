@@ -12,7 +12,7 @@
 	
 .text
 _start:
-	MOV R0, #0x3 @cache mode
+	MOV R0, #0x4 @cache mode
 	MOV R2, #0x0 @current index 
 	MOV R3, #0x4 @input size
 	MOV R4, #0x0 @hit count
@@ -81,8 +81,12 @@ LFU:
 	
 	
 MFU:
-	ADD R2, R2, #0x1
-	BX LR
+	CMP R6, R1
+	BEQ MFU_first_hit
+	CMP R6, R8
+	BEQ MFU_second_hit
+	
+	B MFU_miss
 	
 	
 RD:
@@ -283,7 +287,56 @@ LFU_add_second_col:
 	ADD R2, R2, #0x1
 	BX LR
 	
+
+MFU_first_hit:
+	ADD R4, R4, #0x1 @hit detected
+	LDR R10, =FrequencyList
+	LDR R11, [R10, R7] @index of Frequency List
+	ADD R11, R11, #0x1
+	STR R11, [R10, R7] @store new value of frequency for this
+	ADD R2, R2, #0x1
+	BX LR
+
+MFU_second_hit:
+	ADD R4, R4, #0x1 @hit detected
+	LDR R10, =FrequencyList
+	LDR R11, [R10, R9] @index of Frequency List
+	ADD R11, R11, #0x1
+	STR R12, [R10, R9] @store new value of frequency for this
+	ADD R2, R2, #0x1
+	BX LR
+
+
+MFU_miss:
+	ADD R5, R5, #0x1 @miss detected
+	LDR R10, =FrequencyList
+	CMP R1, #0xFFFFFFFF @-1 means cache is empty, no repleacment reqiured
+	BEQ MFU_add_first_col
+ 	CMP R8, #0xFFFFFFFF @-1 means cache is empty, no repleacment reqiured
+	BEQ MFU_add_second_col
+	LDR R8, [R9, R10] @value of second column in freq list
+	LDR R1, [R7, R10] @value of first columb in freq list
+	CMP R1, R8
+	BLE MFU_add_second_col
+	B MFU_add_first_col
 	
+
+MFU_add_first_col:
+	MOV R1, #0x1
+	STR R1, [R7, R10]
+	LDR R8, =cache
+	STR R6, [R7, R8]
+	ADD R2, R2, #0x1
+	BX LR
+
+MFU_add_second_col:
+	MOV R1, #0x1
+	STR R1, [R9, R10]
+	LDR R8, =cache
+	STR R6, [R9, R8]
+	ADD R2, R2, #0x1
+	BX LR
+
 
 
 _END:
