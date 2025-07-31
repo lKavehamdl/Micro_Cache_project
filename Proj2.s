@@ -27,7 +27,7 @@
 	
 .text
 _start:
-	MOV R0, #0x0 @cache mode
+	MOV R0, #0x9 @cache mode
 	MOV R2, #0x0 @current index 
 	
 	B exec
@@ -70,13 +70,14 @@ exec2:
 	
 	LDR R8, =L2Cache
 	AND R4, R0, #0x38 @second 3 bits(cache mode)
+	LSR R4, R4, #0x3
 	LDR R1, [R7, R8] @value of first col in L2
 	LDR R8, [R9, R8] @value of second col in L2
 	
 	CMP R4, #0x0
 	BEQ FIFO2
-	//CMP R4, #0x1
-	//BEQ LRU2
+	CMP R4, #0x1
+	BEQ LRU2
 	//CMP R4, #0x2
 	//BEQ MRU2
 	//CMP R4, #0x3
@@ -147,13 +148,13 @@ FIFO2:
 	
 	B FIFO_miss 
 	
-// LRU2:
-// 	CMP R6, R1
-// 	BEQ LRU2_first_hit
-// 	CMP R6, R8
-// 	BEQ LRU2_second_hit
+ LRU2:
+ 	CMP R6, R1
+ 	BEQ LRU2_hit
+ 	CMP R6, R8
+ 	BEQ LRU2_hit
 	
-// 	B LRU_miss 
+ 	B LRU_miss 
 	
 	
 // MRU2:
@@ -260,18 +261,6 @@ FIFO2_hit:
 	
 	ADD R2, R2, #0x1 @increment
 	BX LR
-	
-
-//FIFO2_second_hit:
-	//LDR R4, =L2Hit
-	//LDR R5, [R4]
-	//ADD R5, R5, #0x1 @hit detected
-	//STR R5, [R4]
-	
-	@TODO: SWAP
-	
-	//ADD R2, R2, #0x1 @increment
-	//BX LR
 	
 
 	
@@ -381,11 +370,64 @@ LRU_second_hit:
 	ADD R2, R2, #0x1 @increment
 	BX LR
 	
+LRU2_hit:
+	LDR R4, =L2Hit
+	LDR R5, [R4]
+	ADD R5, R5, #0x1 @hit detected
+	STR R5, [R4]
+	
+	LDR R10, =LRUList
+	AND R11, R6, #0x3 @find line
+	MOV R12, #0x4
+	MUL R11, R11, R12 @mul won't accept immediate
+	ADD R11, R11, R10 @index of LRUList
+	LDR R12, [R11]
+	
+	@L2 --> L1
+	LDR R4, =L1Cache
+	AND R3, R6, #0x3 @find line
+	MOV R10, #0x8
+	MUL R3, R3, R10
+	ADD R4, R3, R4
+	LDR R5, [R4, R12, LSL #0x2]
+	STR R6, [R4, R12, LSL #0x2]
+	
+	@FIFO List update
+	CMP R12, #0x0
+	MOVEQ R12, #0x1
+	MOVNE R12, #0x0
+	STR R12, [R11]
+	
+	LDR R10, =FIFOList2
+	AND R11, R6, #0x3 @find line
+	MOV R12, #0x4
+	MUL R11, R11, R12 @mul won't accept immediate
+	ADD R11, R11, R10 @index of FIFOList
+	LDR R12, [R11]
+	
+	@L1 --> L2
+	LDR R4, =L2Cache
+	ADD R4, R3, R4
+	STR R5, [R4, R12, LSL #0x2]
+	
+	@FIFO list 2 update
+	CMP R12, #0x0
+	MOVEQ R12, #0x1
+	MOVNE R12, #0x0
+	STR R12, [R11]
+	
+	
+	ADD R2, R2, #0x1 @increment
+	BX LR
+	
+
+	
 LRU_miss:
 	LDR R4, =L2Miss
 	LDR R5, [R4]
 	ADD R5, R5, #0x1 @miss detected
 	STR R5, [R4]
+	
 	LDR R10, =LRUList
 	AND R11, R6, #0x3 @find line
 	MOV R12, #0x4
@@ -398,21 +440,39 @@ LRU_miss:
 	
 LRU_add_first_col:
 	MOV R12, #0x1
-	STR R12, [R11] @change replacement index for next round
+	STR R12, [R11] @change First In for next round
 	LDR R8, =L1Cache
-	STR R6, [R7, R8] @store value in right position
-	ADD R2, R2, #0x1
-	BX LR
-
+	LDR R4, [R8, R7] @read data before replace
+	STR R6, [R8, R7] @store value in right position
+	
+	B L2_LRU_decision
+	
 LRU_add_second_col:
 	MOV R12, #0x0
-	STR R12, [R11] @change replacement index for next round
+	STR R12, [R11] @change First In for next round
 	LDR R8, =L1Cache
-	STR R6, [R9, R8] @store value in right position
-	ADD R2, R2, #0x1
-	BX LR
-
-
+	LDR R4, [R8, R9] @store value in right position
+	STR R6, [R8, R9] @store value in right position
+	
+	
+	B L2_LRU_decision
+	
+	
+L2_LRU_decision:
+	LDR R10, =LRUList2
+	AND R11, R6, #0x3 @find line
+	MOV R6, R4 @store R4 in R6 for later checks
+	AND R4, R0, #0x7 @keep policy
+	MOV R12, #0x4
+	MUL R11, R11, R12 @mul won't accept immediate
+	ADD R11, R11, R10 @index of LRUList
+	LDR R12, [R11]
+	
+	CMP R12, #0x0
+	BEQ Transfer_to_first_col_L2
+	BNE Transfer_to_second_col_L2
+	
+	
 
 MRU_first_hit: 
 	LDR R4, =L1Hit
