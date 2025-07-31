@@ -4,6 +4,10 @@
 	.balign 32
 	arr: .word 0x1, 0x5, 0x1, 0x9
 	cache: .word 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF 
+	L1Hit: .word 0x0
+	L1Miss: .word 0x0
+	L2Hit: .word 0x0
+	L2Miss: .word 0x0
 	@ 4 by 2 with 4 bytes per each block
 	FIFOList: .word 0x0, 0x0, 0x0, 0x0 @one per each line
 	LRUList: .word 0x0, 0x0, 0x0, 0x0 @one per each line
@@ -16,8 +20,7 @@ _start:
 	MOV R0, #0x5 @cache mode
 	MOV R2, #0x0 @current index 
 	MOV R3, #0x4 @input size
-	MOV R4, #0x0 @hit count
-	MOV R5, #0x0 @miss count
+	
 	B exec
 	
 exec:
@@ -100,17 +103,26 @@ RD:
 	
 
 FIFO_first_hit:
-	ADD R4, R4, #0x1 @hit detected
+	LDR R4, =L1Hit
+	LDR R5, [R4]
+	ADD R5, R5, #0x1 @hit detected
+	STR R5, [R4]
 	ADD R2, R2, #0x1 @increment
 	BX LR
 	
 FIFO_second_hit:
-	ADD R4, R4, #0x1 @hit detected
+	LDR R4, =L1Hit
+	LDR R5, [R4]
+	ADD R5, R5, #0x1 @hit detected
+	STR R5, [R4]
 	ADD R2, R2, #0x1 @increment
 	BX LR
 	
 FIFO_miss:
+	LDR R4, =L1Miss
+	LDR R5, [R4]
 	ADD R5, R5, #0x1 @miss detected
+	STR R5, [R4]
 	LDR R10, =FIFOList
 	AND R11, R6, #0x3 @find line
 	MOV R12, #0x4
@@ -118,27 +130,32 @@ FIFO_miss:
 	ADD R11, R11, R10 @index of FIFOList
 	LDR R12, [R11]
 	CMP R12, #0x0
-	BEQ LRU_add_first_col
-	BNE LRU_add_second_col
+	BEQ FIFO_add_first_col
+	BNE FIFO_add_second_col
 	
 FIFO_add_first_col:
 	MOV R12, #0x1
 	STR R12, [R11] @change First In for next round
-	STR R6, [R7] @store value in right position
+	LDR R4, =cache
+	STR R6, [R4, R7] @store value in right position
 	ADD R2, R2, #0x1
 	BX LR
 
 FIFO_add_second_col:
 	MOV R12, #0x0
 	STR R12, [R11] @change First In for next round
-	STR R6, [R9] @store value in right position
+	LDR R4, =cache
+	STR R6, [R4, R9] @store value in right position
 	ADD R2, R2, #0x1
 	BX LR
 
 	
 	
 LRU_first_hit:
-	ADD R4, R4, #0x1 @hit detected
+	LDR R4, =L1Hit
+	LDR R5, [R4]
+	ADD R5, R5, #0x1 @hit detected
+	STR R5, [R4]
 	LDR R10, =LRUList
 	AND R11, R6, #0x3 @find line
 	MOV R12, #0x4
@@ -152,7 +169,10 @@ LRU_first_hit:
 	BX LR
 	
 LRU_second_hit:
-	ADD R4, R4, #0x1 @hit detected
+	LDR R4, =L1Hit
+	LDR R5, [R4]
+	ADD R5, R5, #0x1 @hit detected
+	STR R5, [R4]
 	LDR R10, =LRUList
 	AND R11, R6, #0x3 @find line
 	MOV R12, #0x4
@@ -166,7 +186,10 @@ LRU_second_hit:
 	BX LR
 	
 LRU_miss:
+	LDR R4, =L1Miss
+	LDR R5, [R4]
 	ADD R5, R5, #0x1 @miss detected
+	STR R5, [R4]
 	LDR R10, =LRUList
 	AND R11, R6, #0x3 @find line
 	MOV R12, #0x4
@@ -180,21 +203,26 @@ LRU_miss:
 LRU_add_first_col:
 	MOV R12, #0x1
 	STR R12, [R11] @change replacement index for next round
-	STR R6, [R7] @store value in right position
+	LDR R4, =cache
+	STR R6, [R7, R4] @store value in right position
 	ADD R2, R2, #0x1
 	BX LR
 
 LRU_add_second_col:
 	MOV R12, #0x0
 	STR R12, [R11] @change replacement index for next round
-	STR R6, [R9] @store value in right position
+	LDR R4, =cache
+	STR R6, [R9, R4] @store value in right position
 	ADD R2, R2, #0x1
 	BX LR
 
 
 
 MRU_first_hit: 
-	ADD R4, R4, #0x1 @hit detected
+	LDR R4, =L1Hit
+	LDR R5, [R4]
+	ADD R5, R5, #0x1 @hit detected
+	STR R5, [R4]
 	LDR R10, =MRUList
 	AND R11, R6, #0x3 @find line
 	MOV R12, #0x4
@@ -206,7 +234,10 @@ MRU_first_hit:
 	BX LR
 	
 MRU_second_hit: 
-	ADD R4, R4, #0x1 @hit detected
+	LDR R4, =L1Hit
+	LDR R5, [R4]
+	ADD R5, R5, #0x1 @hit detected
+	STR R5, [R4]
 	LDR R10, =MRUList
 	AND R11, R6, #0x3 @find line
 	MOV R12, #0x4
@@ -218,7 +249,10 @@ MRU_second_hit:
 	BX LR
 	
 MRU_miss: 
+	LDR R4, =L1Miss
+	LDR R5, [R4]
 	ADD R5, R5, #0x1 @miss detected
+	STR R5, [R4]
 	CMP R1, #0xFFFFFFFF @-1 means cache is empty, no replacement required
 	BEQ MRU_add_first_col
 	CMP R8, #0xFFFFFFFF @-1 means cache is empty, no replacement required
@@ -236,19 +270,24 @@ MRU_miss:
 MRU_add_first_col: 
 	MOV R12, #0x0
 	STR R12, [R11] @change replacement index for next round
-	STR R6, [R7] @store value in right position
+	LDR R4, =cache
+	STR R6, [R7, R4] @store value in right position
 	ADD R2, R2, #0x1
 	BX LR
 
 MRU_add_second_col: 
 	MOV R12, #0x1
 	STR R12, [R11] @change replacement index for next round
-	STR R6, [R9] @store value in right position
+	LDR R4, =cache
+	STR R6, [R9, R4] @store value in right position
 	ADD R2, R2, #0x1
 	BX LR
 	
 LFU_first_hit:
-	ADD R4, R4, #0x1 @hit detected
+	LDR R4, =L1Hit
+	LDR R5, [R4]
+	ADD R5, R5, #0x1 @hit detected
+	STR R5, [R4]
 	LDR R10, =FrequencyList
 	LDR R11, [R10, R7] @index of Frequency List
 	ADD R11, R11, #0x1
@@ -257,7 +296,10 @@ LFU_first_hit:
 	BX LR
 
 LFU_second_hit:
-	ADD R4, R4, #0x1 @hit detected
+	LDR R4, =L1Hit
+	LDR R5, [R4]
+	ADD R5, R5, #0x1 @hit detected
+	STR R5, [R4]
 	LDR R10, =FrequencyList
 	LDR R11, [R10, R9] @index of Frequency List
 	ADD R11, R11, #0x1
@@ -267,7 +309,10 @@ LFU_second_hit:
 
 
 LFU_miss:
+	LDR R4, =L1Miss
+	LDR R5, [R4]
 	ADD R5, R5, #0x1 @miss detected
+	STR R5, [R4]
 	LDR R10, =FrequencyList
 	LDR R8, [R9, R10] @value of second column in freq list
 	LDR R1, [R7, R10] @value of first columb in freq list
@@ -294,7 +339,10 @@ LFU_add_second_col:
 	
 
 MFU_first_hit:
-	ADD R4, R4, #0x1 @hit detected
+	LDR R4, =L1Hit
+	LDR R5, [R4]
+	ADD R5, R5, #0x1 @hit detected
+	STR R5, [R4]
 	LDR R10, =FrequencyList
 	LDR R11, [R10, R7] @index of Frequency List
 	ADD R11, R11, #0x1
@@ -303,7 +351,10 @@ MFU_first_hit:
 	BX LR
 
 MFU_second_hit:
-	ADD R4, R4, #0x1 @hit detected
+	LDR R4, =L1Hit
+	LDR R5, [R4]
+	ADD R5, R5, #0x1 @hit detected
+	STR R5, [R4]
 	LDR R10, =FrequencyList
 	LDR R11, [R10, R9] @index of Frequency List
 	ADD R11, R11, #0x1
@@ -313,7 +364,10 @@ MFU_second_hit:
 
 
 MFU_miss:
+	LDR R4, =L1Miss
+	LDR R5, [R4]
 	ADD R5, R5, #0x1 @miss detected
+	STR R5, [R4]
 	LDR R10, =FrequencyList
 	CMP R1, #0xFFFFFFFF @-1 means cache is empty, no repleacment reqiured
 	BEQ MFU_add_first_col
@@ -343,17 +397,26 @@ MFU_add_second_col:
 	BX LR
 	
 RD_first_hit:
-	ADD R4, R4, #0x1 @hit detected
+	LDR R4, =L1Hit
+	LDR R5, [R4]
+	ADD R5, R5, #0x1 @hit detected
+	STR R5, [R4]
 	ADD R2, R2, #0x1
 	BX LR
 
 RD_second_hit:
-	ADD R4, R4, #0x1 @hit detected
+	LDR R4, =L1Hit
+	LDR R5, [R4]
+	ADD R5, R5, #0x1 @hit detected
+	STR R5, [R4]
 	ADD R2, R2, #0x1
 	BX LR
 
 RD_miss:
+	LDR R4, =L1Miss
+	LDR R5, [R4]
 	ADD R5, R5, #0x1 @miss detected
+	STR R5, [R4]
 	LDR R10, =RandomList
 	CMP R1, #0xFFFFFFFF @-1 means cache is empty, no repleacment reqiured
 	BEQ RD_add_first_col
