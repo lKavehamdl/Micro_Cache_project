@@ -15,19 +15,19 @@
 	LRUList: .word 0x0, 0x0, 0x0, 0x0 @one per each line
 	MRUList: .word 0x1, 0x1, 0x1, 0x1 @one per each line
 	FrequencyList: .word 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0 @per each block of L1Cache 
-	RandomList: .word 0xABD234FE, 0x1234FDEF, 0xDDCC2345, 0xACDF6543 @size of sequence
+	RandomList: .word 0xABD234FE, 0x1234FDEF, 0xDDCC2345, 0xACDF6543, 0x0, 0x0, 0x1, 0x0 @size of sequence
 	
 	FIFOList2: .word 0x0, 0x0, 0x0, 0x0 @one per each line
 	LRUList2: .word 0x0, 0x0, 0x0, 0x0 @one per each line
 	MRUList2: .word 0x1, 0x1, 0x1, 0x1 @one per each line
 	FrequencyList2: .word 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0 @per each block of L1Cache 
-	RandomList2: .word 0xABD234FE, 0x1234FDEF, 0xDDCC2345, 0xACDF6543 @size of sequence
+	RandomList2: .word 0xABD234FE, 0x1234FDEF, 0xDDCC2345, 0xACDF6543, 0x0, 0x0, 0x1, 0x0 @size of sequence
 	
 	inp_size: .word 0x8
 	
 .text
 _start:
-	MOV R0, #0x10 @cache mode
+	MOV R0, #0x28 @cache mode
 	MOV R2, #0x0 @current index 
 	
 	B exec
@@ -749,6 +749,9 @@ MRU2_add_second_col:
 	B ChizDorostKon
 	
 L2_LFU_decision:
+	CMP R4, #0xFFFFFFFF @-1 means there was no data in L1, no changes required
+	BEQ ChizDorostKon
+	
 	LDR R10, =FrequencyList2
 	AND R11, R6, #0x3 @find line
 	MOV R12, #0x8
@@ -764,6 +767,7 @@ L2_LFU_decision:
 LFU2_add_first_col:
 	MOV R3, #0x1
 	STR R3, [R11]
+	
 	LDR R10, =L2Cache
 	STR R4, [R10, R7] @store value in right position
 	
@@ -772,12 +776,16 @@ LFU2_add_first_col:
 LFU2_add_second_col:
 	MOV R3, #0x1
 	STR R3, [R5]
+	
 	LDR R10, =L2Cache
 	STR R4, [R10, R9] @store value in right position
 	
 	B ChizDorostKon
 	
 L2_MFU_decision:
+	CMP R4, #0xFFFFFFFF @-1 means there was no data in L1, no changes required
+	BEQ ChizDorostKon
+	
 	LDR R10, =FrequencyList2
 	AND R11, R6, #0x3 @find line
 	MOV R12, #0x8
@@ -786,6 +794,12 @@ L2_MFU_decision:
 	LDR R12, [R11]
 	ADD R5, R11, #0x4
 	LDR R3, [R5]
+	
+	CMP R1, #0xFFFFFFFF @-1 means there is an empty block, place it there
+	BEQ MFU2_add_first_col
+	CMP R8, #0xFFFFFFFF
+	BEQ MFU2_add_second_col
+	
 	CMP R12, R3
 	BLE MFU2_add_second_col
 	B MFU2_add_first_col
@@ -793,6 +807,7 @@ L2_MFU_decision:
 MFU2_add_first_col:
 	MOV R3, #0x1
 	STR R3, [R11]
+	
 	LDR R10, =L2Cache
 	STR R4, [R10, R7] @store value in right position
 	
@@ -801,13 +816,19 @@ MFU2_add_first_col:
 MFU2_add_second_col:
 	MOV R3, #0x1
 	STR R3, [R5]
-	LDR R10, =L1Cache
+	
+	LDR R10, =L2Cache
 	STR R4, [R10, R9] @store value in right position
 	
 	B ChizDorostKon
 	
 
 L2_RD_decision:
+	CMP R1, #0xFFFFFFFF @-1 means there is an empty block, put it there
+	BEQ RD2_add_first_col
+	CMP R8, #0xFFFFFFFF @-1 means there is an empty block, put it there
+	BEQ RD2_add_second_col
+	
 	LDR R10, =RandomList2
 	AND R11, R6, #0x3 @find line
 	MOV R12, #0x4
