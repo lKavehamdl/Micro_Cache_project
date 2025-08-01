@@ -27,7 +27,7 @@
 	
 .text
 _start:
-	MOV R0, #0x28 @cache mode
+	MOV R0, #0x5 @cache mode
 	MOV R2, #0x0 @current index 
 	
 	B exec
@@ -197,7 +197,7 @@ LFU_second_hit:
 	LDR R10, =FrequencyList
 	LDR R11, [R10, R9] @index of Frequency List
 	ADD R11, R11, #0x1
-	STR R12, [R10, R9] @store new value of frequency for this
+	STR R11, [R10, R9] @store new value of frequency for this
 	ADD R2, R2, #0x1
 	BX LR
 
@@ -229,7 +229,7 @@ MFU_second_hit:
 	LDR R10, =FrequencyList
 	LDR R11, [R10, R9] @index of Frequency List
 	ADD R11, R11, #0x1
-	STR R12, [R10, R9] @store new value of frequency for this
+	STR R11, [R10, R9] @store new value of frequency for this
 	ADD R2, R2, #0x1
 	BX LR
 
@@ -242,6 +242,10 @@ RD:
 	B exec2
 	
 RD_first_hit:
+	LDR R4, =L1Hit
+	LDR R5, [R4]
+	ADD R5, R5, #0x1 @hit detected
+	STR R5, [R4]
 	LDR R10, =L1Cache
 	STR R6, [R7, R10]
 	ADD R2, R2, #0x1
@@ -249,6 +253,10 @@ RD_first_hit:
 
 
 RD_second_hit:
+	LDR R4, =L1Hit
+	LDR R5, [R4]
+	ADD R5, R5, #0x1 @hit detected
+	STR R5, [R4]
 	LDR R10, =L1Cache
 	STR R6, [R9, R10]
 	ADD R2, R2, #0x1
@@ -445,7 +453,7 @@ RD2_hit:
 	B L1_decision_selection
 
 L1_decision_selection:
-	AND R4, R0, #0x3
+	AND R4, R0, #0x7
 	CMP R4, #0x0
 	BEQ L1_FIFO_decision
 	CMP R4, #0x1
@@ -519,24 +527,34 @@ LRU_add_second_col:
 	B L2_decision_selection
 
 L1_MRU_decision:
-	CMP R1, #0xFFFFFFFF @-1 means cache is empty, no replacment required
-	BEQ MRU_add_first_col
-	CMP R8, #0xFFFFFFFF @-1 means cache is empty, no replacment required
-	BEQ MRU_add_second_col
-	LDR R10, =MRUList
+	LDR R10, =L1Cache
 	AND R11, R6, #0x3 @find line
-	MOV R12, #0x4
+	MOV R12, #0x8
 	MUL R11, R11, R12 @mul won't accept immediate
 	ADD R11, R11, R10 @index of LRUList
 	LDR R12, [R11]
+	ADD R11, R11, #0x4
+	LDR R4, [R11]
+	LDR R10, =MRUList
+	AND R11, R6, #0x3 @find line
+	MOV R3, #0x4
+	MUL R11, R11, R3 @mul won't accept immediate
+	ADD R11, R11, R10 @index of LRUList
+	
+	CMP R12, #0xFFFFFFFF @-1 means cache is empty, no replacment required
+	BEQ MRU_add_first_col
+	CMP R4, #0xFFFFFFFF @-1 means cache is empty, no replacment required
+	BEQ MRU_add_second_col
+	
+	LDR R12, [R11]
 	CMP R12, #0x0
-	MOVEQ R12, #0x1
-	MOVNE R12, #0x0
-	STR R12, [R11]
 	BEQ MRU_add_first_col
 	BNE MRU_add_second_col
 	
 MRU_add_first_col:
+	MOV R12, #0x0
+	STR R12, [R11]
+	
 	LDR R10, =L1Cache
 	LDR R4, [R10, R7] @read data before replace
 	STR R6, [R10, R7] @store value in right position
@@ -544,6 +562,9 @@ MRU_add_first_col:
 	B L2_decision_selection
 	
 MRU_add_second_col:
+	MOV R12, #0x1
+	STR R12, [R11]
+	
 	LDR R10, =L1Cache
 	LDR R4, [R10, R9] @store value in right position
 	STR R6, [R10, R9] @store value in right position
@@ -581,13 +602,28 @@ LFU_add_second_col:
 	B L2_decision_selection
 	
 L1_MFU_decision:
-	LDR R10, =FrequencyList
+	LDR R10, =L1Cache
 	AND R11, R6, #0x3 @find line
 	MOV R12, #0x8
 	MUL R11, R11, R12 @mul won't accept immediate
 	ADD R11, R11, R10 @index of LRUList
 	LDR R12, [R11]
+	ADD R11, R11, #0x4
+	LDR R4, [R11]
+	
+	LDR R10, =FrequencyList
+	AND R11, R6, #0x3 @find line
+	MOV R3, #0x8
+	MUL R11, R11, R3 @mul won't accept immediate
+	ADD R11, R11, R10 @index of LRUList
 	ADD R5, R11, #0x4
+	
+	CMP R12, #0xFFFFFFFF @-1 means cache is empty, no replacment required
+	BEQ MRU_add_first_col
+	CMP R4, #0xFFFFFFFF @-1 means cache is empty, no replacment required
+	BEQ MRU_add_second_col
+	
+	LDR R12, [R11]
 	LDR R4, [R5]
 	MOV R3, #0x1
 	CMP R12, R4
@@ -612,11 +648,24 @@ MFU_add_second_col:
 	
 
 L1_RD_decision:
-	LDR R10, =RandomList
+	LDR R10, =L1Cache
 	AND R11, R6, #0x3 @find line
-	MOV R12, #0x4
+	MOV R12, #0x8
 	MUL R11, R11, R12 @mul won't accept immediate
 	ADD R11, R11, R10 @index of LRUList
+	LDR R12, [R11]
+	ADD R11, R11, #0x4
+	LDR R4, [R11]
+	
+	CMP R12, #0xFFFFFFFF @-1 means cache is empty, no replacment required
+	BEQ RD_add_first_col
+	CMP R4, #0xFFFFFFFF @-1 means cache is empty, no replacment required
+	BEQ RD_add_second_col
+	
+	
+	LDR R10, =RandomList
+	LSL R11, R2, #0x2
+	ADD R11, R11, R10
 	LDR R12, [R11]
 	AND R12, R12, #0x1
 	CMP R12, #0x0
@@ -682,10 +731,10 @@ FIFO2_add_first_col:
 	B ChizDorostKon
 	
 FIFO2_add_second_col:
-	MOV R12, #0x1
+	MOV R12, #0x0
 	STR R12, [R11] @change First In for next round
 	LDR R10, =L2Cache
-	STR R4, [R10, R7] @store value in right position
+	STR R4, [R10, R9] @store value in right position
 	
 	B ChizDorostKon
 	
@@ -830,10 +879,8 @@ L2_RD_decision:
 	BEQ RD2_add_second_col
 	
 	LDR R10, =RandomList2
-	AND R11, R6, #0x3 @find line
-	MOV R12, #0x4
-	MUL R11, R11, R12 @mul won't accept immediate
-	ADD R11, R11, R10 @index of LRUList
+	LSL R11, R2, #0x2
+	ADD R11, R11, R10
 	LDR R12, [R11]
 	AND R12, R12, #0x1
 	CMP R12, #0x0
